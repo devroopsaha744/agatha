@@ -1,0 +1,10 @@
+fastapi>=0.68.0
+uvicorn>=0.15.0
+langchain-community
+langchainhub
+langgraph
+langchain-groq
+python-dotenv
+typing_extensions
+pydantic
+
