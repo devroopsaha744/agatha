@@ -1,4 +1,6 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import Response  # Import Response to set the media type
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
 from typing import Dict, Any
 import sqlite3
@@ -16,6 +18,9 @@ from langchain_community.agent_toolkits import SQLDatabaseToolkit
 from langchain_core.messages import HumanMessage
 from langgraph.prebuilt import create_react_agent
 
+# Import Twilio's MessagingResponse for sending back TwiML responses
+from twilio.twiml.messaging_response import MessagingResponse
+
 # Load environment variables (e.g., GROQ_API_KEY)
 load_dotenv()
 
@@ -24,11 +29,10 @@ app = FastAPI()
 
 # --- Replicate Notebook Logic ---
 
-# Initialize Groq LLM
 llm = ChatGroq(
     temperature=0,
     model="llama-3.3-70b-versatile",
-    api_key=os.getenv("GROQ_API_KEY_2")
+    api_key=os.getenv("GROQ_API_KEY_3")
 )
 
 # --- Classification Setup ---
@@ -60,16 +64,46 @@ def classify_query(chunk: str) -> str:
     return response["input_type"]
 
 # --- Ingestion Pipeline Setup ---
+from typing import Annotated
+from typing_extensions import TypedDict
+
 class Transaction(TypedDict):
+    transaction_id: Annotated[int, "Unique identifier for the transaction."]
     date: Annotated[str, "The date of the transaction in 'YYYY-MM-DD' format."]
     amount: Annotated[float, "The amount spent in the transaction."]
     vendor: Annotated[str, "The name of the vendor or store where the transaction occurred."]
     description: Annotated[str, "A brief description of the transaction, such as items purchased."]
+    category: Annotated[str, "The category of the transaction (e.g., food, groceries, entertainment)."]
+    payment_method: Annotated[str, "The payment method used for the transaction (e.g., credit card, cash, online payment)."]
+    location: Annotated[str, "The location where the transaction occurred (if available)."]
+    notes: Annotated[str, "Any additional notes related to the transaction."]
+    currency: Annotated[str, "The currency used for the transaction (e.g., INR, USD, EUR)."]
+
 
 transaction_prompt = ChatPromptTemplate.from_messages([
-    ("system", "Extract the transaction details from the given text input. Focus on date, amount, vendor, and description."),
-    ("human", "Text: {chunk}\n\nExtract the following details:\n- Date\n- Amount\n- Vendor\n- Description.")
+    ("system", """
+        Extract the following transaction details from the given text input. 
+        Focus on transaction_id, date, amount, vendor, description, category, 
+        payment_method, location, notes, and currency. 
+        Ensure that each field is correctly identified and extracted.
+    """),
+    ("human", """
+        Text: {chunk}
+
+        Extract the following details:
+        - Transaction ID (optional, if available)
+        - Date (in 'YYYY-MM-DD' format)
+        - Amount (in numeric form)
+        - Vendor (store or vendor name)
+        - Description (brief description of the transaction)
+        - Category (e.g., food, electronics, groceries)
+        - Payment Method (e.g., credit card, cash, online payment)
+        - Location (e.g., city, online, specific store)
+        - Notes (any additional information related to the transaction)
+        - Currency (e.g., INR, USD, EUR)
+    """)
 ])
+
 transaction_llm = llm.with_structured_output(Transaction)
 
 def extract_transaction_details(chunk: str) -> Dict[str, Any]:
@@ -115,24 +149,15 @@ def process_and_store_transaction(chunk: str):
 db = SQLDatabase.from_uri("sqlite:///transactions.db")
 
 # Define a new system prompt without placeholders for dialect or limits.
-system_message = """
-Given an input question, create a syntactically correct SQL query to run to help find the answer.
-Do not apply any default limit on the number of results.
-Order the results by a relevant column to return the most interesting examples in the database.
-
-Never query for all the columns from a specific table; only ask for the few relevant columns given the question.
-
-Pay attention to use only the column names that you can see in the schema description.
-Be careful not to query for columns that do not exist.
-Also, pay attention to which column is in which table.
-"""
+query_prompt_template = hub.pull("langchain-ai/sql-agent-system-prompt")
+system_message = query_prompt_template.format(dialect="SQLite", top_k="")
 
 # Build the SQL agent using the SQLDatabaseToolkit.
 toolkit = SQLDatabaseToolkit(db=db, llm=llm)
 tools = toolkit.get_tools()
 agent_executor = create_react_agent(llm, tools, prompt=system_message)
 
-# --- FastAPI Endpoints ---
+# --- Regular FastAPI Endpoint for JSON-based Requests ---
 class TextInput(BaseModel):
     text: str
 
@@ -157,8 +182,7 @@ async def process_text(input: TextInput):
             raise HTTPException(status_code=500, detail=str(e))
     else:
         try:
-            # Use the new RAG pipeline with create_react_agent.
-            # Incorporate the provided snippet for processing the QnA query.
+            # QnA pipeline using the React agent
             question = input_text
             final_result = None
             for chunk in agent_executor.stream(
@@ -174,3 +198,48 @@ async def process_text(input: TextInput):
             }
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+# --- New Twilio Webhook Endpoint for WhatsApp Messages ---
+@app.post("/whatsapp")
+async def whatsapp_webhook(request: Request):
+    """
+    This endpoint receives WhatsApp messages via Twilio.
+    It extracts the 'Body' field from the form-encoded POST request,
+    processes the text using your ingestion or QnA pipeline,
+    and replies with a TwiML response.
+    """
+    form_data = await request.form()
+    incoming_message = form_data.get("Body")  # Message text from WhatsApp
+    sender_number = form_data.get("From")     # Sender's WhatsApp number (for logging, if needed)
+    
+    # Process the incoming message using your classification and pipelines.
+    classification = classify_query(incoming_message)
+    
+    if classification == 'ingestion':
+        try:
+            process_and_store_transaction(incoming_message)
+            reply = "Data added successfully."
+        except Exception as e:
+            reply = f"Error during ingestion: {str(e)}"
+    else:
+        try:
+            # QnA pipeline processing
+            question = incoming_message
+            final_result = None
+            for chunk in agent_executor.stream(
+                {"messages": [{"role": "user", "content": question}]},
+                stream_mode="values"
+            ):
+                final_result = chunk
+            result = final_result["messages"][-1].content if final_result else "No answer found."
+            reply = result
+        except Exception as e:
+            reply = f"Error during QnA: {str(e)}"
+    
+    # Create a TwiML response so Twilio can send the reply back on WhatsApp
+    twiml_response = MessagingResponse()
+    twiml_response.message(reply)
+    xml_response = str(twiml_response)
+    
+    # Return the response with the correct Content-Type header
+    return PlainTextResponse(content=xml_response, media_type="text/xml")
