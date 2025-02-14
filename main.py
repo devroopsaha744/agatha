@@ -199,47 +199,4 @@ async def process_text(input: TextInput):
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
-# --- New Twilio Webhook Endpoint for WhatsApp Messages ---
-@app.post("/whatsapp")
-async def whatsapp_webhook(request: Request):
-    """
-    This endpoint receives WhatsApp messages via Twilio.
-    It extracts the 'Body' field from the form-encoded POST request,
-    processes the text using your ingestion or QnA pipeline,
-    and replies with a TwiML response.
-    """
-    form_data = await request.form()
-    incoming_message = form_data.get("Body")  # Message text from WhatsApp
-    sender_number = form_data.get("From")     # Sender's WhatsApp number (for logging, if needed)
-    
-    # Process the incoming message using your classification and pipelines.
-    classification = classify_query(incoming_message)
-    
-    if classification == 'ingestion':
-        try:
-            process_and_store_transaction(incoming_message)
-            reply = "Data added successfully."
-        except Exception as e:
-            reply = f"Error during ingestion: {str(e)}"
-    else:
-        try:
-            # QnA pipeline processing
-            question = incoming_message
-            final_result = None
-            for chunk in agent_executor.stream(
-                {"messages": [{"role": "user", "content": question}]},
-                stream_mode="values"
-            ):
-                final_result = chunk
-            result = final_result["messages"][-1].content if final_result else "No answer found."
-            reply = result
-        except Exception as e:
-            reply = f"Error during QnA: {str(e)}"
-    
-    # Create a TwiML response so Twilio can send the reply back on WhatsApp
-    twiml_response = MessagingResponse()
-    twiml_response.message(reply)
-    xml_response = str(twiml_response)
-    
-    # Return the response with the correct Content-Type header
-    return PlainTextResponse(content=xml_response, media_type="text/xml")
+
