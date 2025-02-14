@@ -4,6 +4,8 @@ This project is an AI-powered WhatsApp Expense Bot designed to process natural l
 
 ## Workflow
 
+![Alt Text](agatha-workflow.png)
+
 The bot follows a 3-step process to handle natural language inputs:
 
 ### Step 1: Natural Language Input Classification
