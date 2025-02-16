@@ -11,6 +11,7 @@ Agatha is a NL2SQL driven expense tracker API. It allows users to either add tra
 - [Overview](#overview)
 - [Features](#features)
 - [API Workflow](#api-workflow)
+- [Privacy & Security Considerations](#privacy--security-considerations)
 - [Endpoints](#endpoints)
   - [Health Check](#health-check)
   - [Database Status](#database-status)
@@ -72,6 +73,25 @@ Agatha uses three core pipelines to handle user inputs:
 
 4. **Response:**  
    Agatha returns a JSON response containing either the ingested transaction details or the answer to the query.
+
+---
+
+## Privacy & Security Considerations
+
+- **Local Data Storage:**  
+  Agatha is designed as a self-hosted solution. When deployed, all sensitive transaction data is stored locally in an SQLite database, ensuring that your personal financial information remains private and under your control.
+
+- **User-Controlled Deployment:**  
+  Since users deploy Agatha on their own servers or machines (via Docker or a local setup), you are fully responsible for securing your environment. No data is sent to external servers by default.
+
+- **Secure Handling of API Keys:**  
+  API keys and other sensitive environment variables should be managed securely. We recommend using environment variables, `.env` files (which should not be committed to source control), or Docker secrets for production deployments.
+
+- **Best Practices for Public Deployment:**  
+  If you choose to deploy Agatha publicly, implement proper authentication, use HTTPS to secure communications, and follow best practices for securing your database (such as using parameterized queries to prevent SQL injection).
+
+- **Data Privacy:**  
+  Ensure that only authorized users have access to Agatha, and consider additional layers of encryption or access control if handling highly sensitive financial data.
 
 ---
 
@@ -222,7 +242,7 @@ Agatha uses three core pipelines to handle user inputs:
 
 4. **Environment Variables:**
 
-   Create a `.env` file in the root directory and set your environment variables:
+   Create a `.env` file in the project root and set your environment variables:
    ```dotenv
    GROQ_API_KEY=your_groq_api_key
    ```
@@ -249,6 +269,11 @@ Agatha uses three core pipelines to handle user inputs:
 
 3. **Access the API:**
    The API will be available at [http://localhost:8000](http://localhost:8000).
+
+*Note:* For secure deployment, ensure you pass environment variables (or secrets) to your container. For example:
+```bash
+docker run -p 8000:8000 --env-file .env agatha
+```
 
 ---
 
@@ -299,7 +324,8 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## Summary
 
-Agatha is a fully automated, natural language-based expense tracker API. It seamlessly handles both transaction ingestion and querying through intelligent classification, data extraction, and a text-to-SQL pipeline. Whether you're adding your expenses or querying your spending habits, Agatha streamlines the process to provide quick, accurate responses.
+Agatha is a fully automated, natural language-based expense tracker API. It seamlessly handles both transaction ingestion and querying through intelligent classification, data extraction, and a text-to-SQL pipeline. Whether you're adding your expenses or querying your spending habits, Agatha streamlines the process to provide quick, accurate responses while keeping your sensitive financial data private.
+
+**Privacy Reminder:** Agatha is intended for self-hosted use. When deployed on your own secure server or local machine, you remain in control of your data. For additional security, always use proper authentication, HTTPS, and environment management practices when handling sensitive information.
 
 For any questions or issues, please open an issue on the repository.
-
