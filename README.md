@@ -2,7 +2,7 @@
 
 Agatha is a natural language driven expense tracker API. It allows users to either add transaction data to a SQL database or ask questions about their expenses, all via natural language. Agatha automatically determines whether an input is intended for ingestion (adding a transaction) or QnA (querying transactions) to improve the user experience.
 
-![workflow](agatha workflow.png)
+![workflow](https://github.com/devroopsaha744/agatha/blob/main/agatha%20workflow.png)
 
 ---
 
