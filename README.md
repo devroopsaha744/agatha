@@ -302,14 +302,14 @@ docker run -p 8000:8000 --env-file .env agatha
 The project requires the following Python packages (as listed in `requirements.txt`):
 
 ```txt
-fastapi==0.95.0
-uvicorn==0.22.0
-pydantic==1.10.2
-python-dotenv==1.0.0
-langchain==<version>
-langchain-groq==<version>
-langchain-community==<version>
-langchain-core==<version>
+fastapi
+uvicorn
+pydanti
+python-dotenv
+langchain
+langchain-groq
+langchain-community
+langchain-core
 ```
 
 *Note:* Replace `<version>` with the appropriate version numbers for your `langchain` related packages.
